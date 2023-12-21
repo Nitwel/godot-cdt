@@ -1,0 +1,73 @@
+# Workflow to automatically create the godot openxr loaders addon
+name: Build on push
+
+on:
+  [push, pull_request]
+
+jobs:
+  build:
+    name: Building for ${{ matrix.name }} (${{ matrix.os }})
+    runs-on: ubuntu-latest
+    container:
+        # using image nitwel/${{ matrix.os }} hosted on dockerhub
+        image: nitwel/godot-android:latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+        #   - name: Linux (x86_64)
+        #     os: ubuntu-20.04
+        #     platform: linux
+        #     flags: arch=x86_64
+        #     artifact_name: build-files-linux-x86_64
+        #     artifact_path: aar/demo/addons/godotopenxrvendors/*/.bin/*.so
+        #   - name: Windows
+        #     os: windows-latest
+        #     platform: windows
+        #     artifact_name: build-files-windows
+        #     artifact_path: aar/demo/addons/godotopenxrvendors/*/.bin/*.dll
+        #   - name: MacOS
+        #     os: macos-11
+        #     platform: macos
+        #     flags: arch=universal
+        #     artifact_name: build-files-macos
+        #     artifact_path: aar/demo/addons/godotopenxrvendors/*/.bin/*.framework
+          - name: Android
+            os: godot-android
+            platform: android
+            flags: arch=arm64
+            artifact_name: build-files-android
+            artifact_path: aar/demo/bin/*
+
+    # Note, to satisfy the asset library we need to make sure our zip files have a root folder
+    # this is why we checkout into aar and build into asset
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          path: aar
+          submodules: recursive
+      - name: Create Files
+        run: |
+          cd aar/source
+          scons platform=${{ matrix.platform }} target=template_debug arch=arm64 disable_exceptions=false
+          scons platform=${{ matrix.platform }} target=template_release arch=arm64 disable_exceptions=false
+          scons platform=${{ matrix.platform }} target=template_debug arch=x86_64 disable_exceptions=false
+          scons platform=${{ matrix.platform }} target=template_release arch=x86_64 disable_exceptions=false
+          cd ../..
+        if: matrix.platform == 'android'
+      - name: Create Files
+        run: |
+          cd aar/source
+          scons platform=${{ matrix.platform }} target=template_debug ${{ matrix.flags }}
+          scons platform=${{ matrix.platform }} target=template_release ${{ matrix.flags }}
+    
+          cd ../..
+        if: matrix.platform != 'android'
+
+      - name: Upload build files (artifacts)
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            ${{ matrix.artifact_path }}
